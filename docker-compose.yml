@@ -1,15 +1,35 @@
 services:
   db:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pg17-hll
     container_name: pgdb
     environment:
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: mydb
+    
+    # --- Performance & Benchmarking Additions ---
+    
+    # 1. Increase shared memory size (default is 64m)
+    shm_size: 1g
+
+    # 2. Set resource limits for consistent benchmarks
+    mem_limit: 2g
+    cpus: '1.0'
+
+    # 3. Override postgresql.conf settings at runtime
+    # Use this to toggle JIT or other parameters for testing.
+    # To disable JIT for a test run, uncomment the line below:
+    # command: ["postgres", "-c", "jit=off"]
+    
     ports:
       - "5432:5432"
+    
     volumes:
-      - pgdata:/var/lib/postgresql
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
   pgdata:
