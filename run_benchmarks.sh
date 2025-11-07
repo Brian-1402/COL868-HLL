@@ -17,6 +17,7 @@
 #
 # Usage:
 #   cd /code
+#   chmod +x run_benchmarks.sh
 #   ./run_benchmarks.sh
 #
 # =============================================================================
@@ -26,16 +27,17 @@ set -o pipefail
 
 # --- Configuration ---
 # psql/pgbench connection params.
-export PGUSER=myuser
-export PGPASSWORD=mypassword
-export PGDATABASE=mydb
+export PGUSER=${PGUSER:-myuser}
+export PGPASSWORD=${PGPASSWORD:-mypassword}
+export PGDATABASE=${PGDATABASE:-mydb}
+export PGHOST=${PGHOST:-localhost}
 
 # Directory where this script and the /sql folder are located
 BASE_DIR="/code"
 SQL_DIR="$BASE_DIR/sql"
 
 # pgbench test parameters
-PGBENCH_RUN_TIME=30 # Max 30s per user request
+PGBENCH_RUN_TIME=2 # Max 30s per user request
 PGBENCH_CLIENTS=8
 PGBENCH_THREADS=2
 
@@ -51,8 +53,10 @@ LOG_DIR_FINAL="$BASE_DIR/logs/$TIMESTAMP"
 OUT_DIR_FINAL="$BASE_DIR/outputs/$TIMESTAMP"
 
 # --- Define Runners ---
-PSQL="psql -v ON_ERROR_STOP=1 -q" # -q for quiet, tee will handle terminal
-PGBENCH="pgbench"
+# Psql: -v ON_ERROR_STOP=1 (stop on error), -q (quiet, tee handles output)
+PSQL="psql -v ON_ERROR_STOP=1 -q"
+# PGBench: -n (no vacuum) is the key fix for the error
+PGBENCH="pgbench -n"
 
 # =============================================================================
 # 1. TRAP FOR LOG COPYING
@@ -118,14 +122,13 @@ rm -rf "$OUT_DIR_TMP" && mkdir -p "$OUT_DIR_TMP"
 # 1. PRE-RUN CLEANUP
 # =============================================================================
 echo ">>> [1/7] Running Pre-Run Cleanup (99_cleanup.sql)..."
-# MODIFIED: Use 'tee' to pipe combined stdout/stderr to log AND terminal
+# Use 'tee' to pipe combined stdout/stderr to log AND terminal
 $PSQL -f "$SQL_DIR/99_cleanup.sql" 2>&1 | tee "$LOG_DIR_TMP/00_cleanup_pre.log"
 
 # =============================================================================
 # 2. SETUP
 # =============================================================================
 echo ">>> [2/7] Running Setup (00_setup.sql)..."
-# MODIFIED: Use 'tee'
 $PSQL -f "$SQL_DIR/00_setup.sql" 2>&1 | tee "$LOG_DIR_TMP/01_setup.log"
 echo "    Setup complete."
 
@@ -135,15 +138,12 @@ echo "    Setup complete."
 echo ">>> [3/7] Running PSQL Tests..."
 
 echo "    Running Test: 01_test_bulk_agg.sql"
-# MODIFIED: Use 'tee'
 $PSQL -f "$SQL_DIR/01_test_bulk_agg.sql" 2>&1 | tee "$LOG_DIR_TMP/01_test_bulk_agg.log"
 
 echo "    Running Test: 02_test_storage.sql"
-# MODIFIED: Use 'tee'
 $PSQL -f "$SQL_DIR/02_test_storage.sql" 2>&1 | tee "$LOG_DIR_TMP/02_test_storage.log"
 
 echo "    Running Test: 03_test_hashing.sql"
-# MODIFIED: Use 'tee'
 $PSQL -f "$SQL_DIR/03_test_hashing.sql" 2>&1 | tee "$LOG_DIR_TMP/03_test_hashing.log"
 
 echo "    PSQL tests complete."
@@ -153,7 +153,7 @@ echo "    PSQL tests complete."
 # =============================================================================
 echo ">>> [4/7] Running pgbench Tests (T=$PGBENCH_RUN_TIME""s, C=$PGBENCH_CLIENTS)..."
 
-# MODIFIED: Use process substitution ( >(tee ...) ) to tee stdout and stderr
+# Use process substitution ( >(tee ...) ) to tee stdout and stderr
 # to separate files while also showing both in the terminal.
 #   - stdout (logs) goes to .log file AND terminal stdout
 #   - stderr (summary) goes to .txt file AND terminal stderr
@@ -188,13 +188,12 @@ echo "    pgbench tests complete."
 # 5. POST-RUN CLEANUP
 # =============================================================================
 echo ">>> [5/7] Running Post-Run Cleanup (99_cleanup.sql)..."
-# MODIFIED: Use 'tee'
 $PSQL -f "$SQL_DIR/99_cleanup.sql" 2>&1 | tee "$LOG_DIR_TMP/99_cleanup_post.log"
 
 # =============================================================================
 # 6. COPY RESULTS
 # =============================================================================
-# MODIFIED: This step is now handled automatically by the 'trap' function
+# This step is now handled automatically by the 'trap' function
 # defined at the top of the script. It will run on exit,
 # whether this point is reached or not.
 echo ">>> [6/7] Copying results (handled by exit trap)..."

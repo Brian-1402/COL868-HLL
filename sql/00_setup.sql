@@ -8,13 +8,20 @@
 -- 4. Creates a table for 'live' point-insert tests.
 -- 5. Populates 'facts' with configurable test data.
 -- 6. Pre-populates aggregate tables for read tests.
+--
+-- CORRECTIONS:
+-- - Changed `hll(log2m=...)` column type to just `hll`.
+--   The HLL object itself stores its parameters.
+-- - Corrected `INSERT` into `daily_uniques_high_accuracy`
+--   to use `hll_add_agg(hashval, 14, 5)` to set parameters.
+-- - Corrected `INSERT` into `live_hll_test` to use
+--   `hll_empty(log2m, ...)` instead of casting.
 -- ============================================================
 
 -- --- Configuration ---
 -- Set these variables for data size.
 -- Default is a "fast" run (100k rows, ~30s setup).
 -- For a full run, increase total_rows to 10,000,000+.
--- For hll configs, the parameter order is: hll(log2m, regwidth, expthresh, sparseon)
 \set total_rows 100000
 \set distinct_users 10000
 \set num_days 30
@@ -38,32 +45,15 @@ CREATE TABLE facts (
 );
 
 -- Aggregate table with default HLL settings
--- hll(log2m=11, regwidth=5, expthresh=-1, sparseon=1)
 CREATE TABLE daily_uniques_default (
   date_key    DATE PRIMARY KEY,
-  users       hll
+  users       hll -- HLL object parameters are self-contained
 );
 
 -- Aggregate table with high accuracy settings
--- hll(log2m=14, regwidth=5)
 CREATE TABLE daily_uniques_high_accuracy (
   date_key    DATE PRIMARY KEY,
-  users       hll(14, 5)
-);
-
--- Aggregate table, 'explicit' representation disabled
--- hll(log2m=11, regwidth=5, expthresh=0)
-CREATE TABLE daily_uniques_no_explicit (
-  date_key    DATE PRIMARY KEY,
-  users       hll(11, 5, 0)
-  -- users       hll(log2m=11, regwidth=5, expthresh=0)
-);
-
--- Aggregate table, 'explicit' and 'sparse' disabled
--- hll(log2m=11, regwidth=5, expthresh=0, sparseon=0)
-CREATE TABLE daily_uniques_no_sparse (
-  date_key    DATE PRIMARY KEY,
-  users       hll(11, 5, 0, 0)
+  users       hll -- HLL object parameters are self-contained
 );
 
 -- Table for point-insert (hll_add) tests
@@ -94,7 +84,7 @@ ANALYZE facts;
 INSERT INTO daily_uniques_default(date_key, users)
   SELECT 
     date_trunc('day', visit_time)::date, 
-    hll_add_agg(hll_hash_bigint(user_id))
+    hll_add_agg(hll_hash_bigint(user_id)) -- Use default parameters
   FROM facts
   GROUP BY 1;
 ANALYZE daily_uniques_default;
@@ -103,28 +93,23 @@ ANALYZE daily_uniques_default;
 INSERT INTO daily_uniques_high_accuracy(date_key, users)
   SELECT 
     date_trunc('day', visit_time)::date, 
-    -- hll_add_agg(hll_hash_bigint(user_id))
-	-- hll_union_agg(hll_add(hll_empty()::hll(14, 5), hll_hash_bigint(user_id)))
-	hll_union_agg(hll_add(hll_empty()::hll(log2m=14, regwidth=5), hll_hash_bigint(user_id)))
+    hll_add_agg(hll_hash_bigint(user_id), 14, 5) -- Use log2m=14, regwidth=5
   FROM facts
   GROUP BY 1;
 ANALYZE daily_uniques_high_accuracy;
-
--- Note: We only pre-populate the two main tables for read/union tests.
--- The other types ('no_explicit', 'no_sparse') will be tested
--- in the point-insert and storage tests.
 
 -- ============================================================
 -- 4. Setup Live Insert Table
 -- ============================================================
 
 \echo '>>> [6/7] Initializing live_hll_test table...'
--- We insert hll_empty() with the correct type casts
+-- We insert hll_empty() with the correct parameters
 INSERT INTO live_hll_test (test_type, hll_set) VALUES
-    ('default', hll_empty()),
-    ('high_accuracy', hll_empty()::hll(log2m=14, regwidth=5)),
-    ('no_explicit', hll_empty()::hll(11, 5, 0)),
-    ('no_sparse', hll_empty()::hll(11, 5, 0, 0));
+    ('default', hll_empty()), -- log2m=11, regwidth=5, expthresh=-1, sparseon=1
+    ('high_accuracy_p14', hll_empty(14, 5)), -- log2m=14, regwidth=5
+    ('no_explicit', hll_empty(11, 5, 0)), -- log2m=11, regwidth=5, expthresh=0
+    ('no_sparse', hll_empty(11, 5, 0, 0)) -- ... expthresh=0, sparseon=0
+ON CONFLICT (test_type) DO NOTHING;
 
 ANALYZE live_hll_test;
 

@@ -10,6 +10,10 @@
 --
 -- It tests this against the different HLL type definitions
 -- to show how parameters affect storage.
+--
+-- CORRECTIONS:
+-- - Replaced all `RAISE NOTICE` calls with `\echo`.
+--   `RAISE NOTICE` is PL/pgSQL, `\echo` is psql.
 -- ============================================================
 
 \echo '>>> Test 02: Storage Footprint...'
@@ -22,61 +26,71 @@ CREATE TABLE results_storage (
     storage_bytes INTEGER
 );
 
--- Use a temporary table for this test
-DROP TABLE IF EXISTS storage_test_table;
-CREATE TABLE storage_test_table (
-    hll_type TEXT PRIMARY KEY,
-    hll_set hll
-);
-
--- Insert empty HLLs of each type
-INSERT INTO storage_test_table (hll_type, hll_set) VALUES
-    ('default', hll_empty()),
-    ('high_accuracy_p14', hll_empty()::hll(log2m=14)),
-    ('no_explicit', hll_empty()::hll(expthresh=0)),
-    ('no_sparse', hll_empty()::hll(expthresh=0, sparseon=0));
-
 -- --- 1. Test EMPTY state ---
-RAISE NOTICE '    Testing EMPTY storage...';
-INSERT INTO results_storage
-SELECT hll_type, 0, pg_column_size(hll_set) FROM storage_test_table;
+\echo '    Testing EMPTY storage...'
+INSERT INTO results_storage (hll_type, item_count, storage_bytes) VALUES
+    ('default', 0, pg_column_size(hll_empty())),
+    ('high_accuracy_p14', 0, pg_column_size(hll_empty(14, 5))),
+    ('no_explicit', 0, pg_column_size(hll_empty(11, 5, 0))),
+    ('no_sparse', 0, pg_column_size(hll_empty(11, 5, 0, 0)));
 
 -- --- 2. Test EXPLICIT state ---
-RAISE NOTICE '    Testing EXPLICIT storage (10 items)...';
--- Add 10 distinct items to each HLL
-UPDATE storage_test_table
-SET hll_set = (
-    SELECT hll_union_agg(hll_add(hll_empty(), hll_hash_integer(s.n)))
-    FROM generate_series(1, 10) s(n)
-);
-INSERT INTO results_storage
-SELECT hll_type, 10, pg_column_size(hll_set) FROM storage_test_table;
+\echo '    Testing EXPLICIT storage (10 items)...'
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'default', 10, pg_column_size(hll_add_agg(hll_hash_integer(s.n)))
+FROM generate_series(1, 10) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'high_accuracy_p14', 10, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 14, 5))
+FROM generate_series(1, 10) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'no_explicit', 10, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 11, 5, 0))
+FROM generate_series(1, 10) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'no_sparse', 10, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 11, 5, 0, 0))
+FROM generate_series(1, 10) s(n);
+
 
 -- --- 3. Test SPARSE state ---
-RAISE NOTICE '    Testing SPARSE storage (500 items)...';
-UPDATE storage_test_table
-SET hll_set = (
-    SELECT hll_union_agg(hll_add(hll_empty(), hll_hash_integer(s.n)))
-    FROM generate_series(1, 500) s(n)
-);
-INSERT INTO results_storage
-SELECT hll_type, 500, pg_column_size(hll_set) FROM storage_test_table;
+\echo '    Testing SPARSE storage (500 items)...'
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'default', 500, pg_column_size(hll_add_agg(hll_hash_integer(s.n)))
+FROM generate_series(1, 500) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'high_accuracy_p14', 500, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 14, 5))
+FROM generate_series(1, 500) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'no_explicit', 500, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 11, 5, 0))
+FROM generate_series(1, 500) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'no_sparse', 500, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 11, 5, 0, 0))
+FROM generate_series(1, 500) s(n);
 
 -- --- 4. Test FULL state ---
-RAISE NOTICE '    Testing FULL storage (10000 items)...';
-UPDATE storage_test_table
-SET hll_set = (
-    SELECT hll_union_agg(hll_add(hll_empty(), hll_hash_integer(s.n)))
-    FROM generate_series(1, 10000) s(n)
-);
-INSERT INTO results_storage
-SELECT hll_type, 10000, pg_column_size(hll_set) FROM storage_test_table;
+\echo '    Testing FULL storage (10000 items)...'
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'default', 10000, pg_column_size(hll_add_agg(hll_hash_integer(s.n)))
+FROM generate_series(1, 10000) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'high_accuracy_p14', 10000, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 14, 5))
+FROM generate_series(1, 10000) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'no_explicit', 10000, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 11, 5, 0))
+FROM generate_series(1, 10000) s(n);
+
+INSERT INTO results_storage (hll_type, item_count, storage_bytes)
+SELECT 'no_sparse', 10000, pg_column_size(hll_add_agg(hll_hash_integer(s.n), 11, 5, 0, 0))
+FROM generate_series(1, 10000) s(n);
 
 -- --- 5. Export Results ---
 \echo '>>> Test 02: Exporting results...'
 \copy results_storage TO '/tmp/hll_bench_outputs/02_results_storage.csv' CSV HEADER;
-
--- Cleanup
-DROP TABLE storage_test_table;
 
 \echo '>>> Test 02: Complete.'
