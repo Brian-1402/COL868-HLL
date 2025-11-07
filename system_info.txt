@@ -1,0 +1,82 @@
+================================
+HARDWARE SPECIFICATIONS
+================================
+
+CPU Information:
+model name	: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+cpu cores	: 8
+cpu MHz		: 2303.999
+
+Memory Information:
+Mem:            31Gi       892Mi        30Gi        29Mi       494Mi        30Gi
+Swap:          8.0Gi          0B       8.0Gi
+
+Disk Information:
+
+================================
+SOFTWARE VERSIONS
+================================
+
+Operating System:
+
+PostgreSQL Version:
+                                                      version                                                       
+--------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 17.6 (Debian 17.6-2.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+
+
+HLL Extension:
+ name | default_version | installed_version |              comment              
+------+-----------------+-------------------+-----------------------------------
+ hll  | 2.19            | 2.19              | type for storing hyperloglog data
+(1 row)
+
+
+PostgreSQL Configuration:
+ shared_buffers 
+----------------
+ 128MB
+(1 row)
+
+ work_mem 
+----------
+ 4MB
+(1 row)
+
+ jit 
+-----
+ on
+(1 row)
+
+
+================================
+DOCKER INFORMATION
+================================
+
+Docker Version:
+Docker version 28.5.1, build e180ab8
+
+Container Status:
+CONTAINER ID   IMAGE      COMMAND                  CREATED        STATUS        PORTS                                         NAMES
+dba93071721d   pg17-hll   "docker-entrypoint.s…"   22 hours ago   Up 16 hours   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp   pgdb
+
+================================
+PYTHON ENVIRONMENT
+================================
+
+Python Version:
+Python 3.12.10
+
+Installed Packages:
+matplotlib                   3.7.1
+matplotlib-inline            0.1.6
+numpy                        1.23.2
+pandas                       2.0.1
+seaborn                      0.13.2
+
+================================
+COLLECTION TIMESTAMP
+================================
+Fri, Nov  7, 2025  5:17:05 PM
+
