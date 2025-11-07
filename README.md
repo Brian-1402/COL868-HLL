@@ -9,8 +9,17 @@ docker exec -it pgdb bash
 ```
 - **Enter psql:**
 ```bash
-docker exec -it pgdb psql -U myuser -d mydb
+docker exec -it pgdb psql
 ```
+
+## Running benchmarks
+- Todo
+
+## Making plots
+```bash
+docker compose -f docker-compose.graphs.yml run --rm plotter
+```
+
 
 ## Verification Commands
 #### 1\. Verify Files (Run in Bash)

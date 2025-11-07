@@ -1,0 +1,12 @@
+services:
+  plotter:
+    build:
+      context: .
+      dockerfile: Dockerfile.graphs
+    image: plotter:latest
+    working_dir: /code
+    volumes:
+      - .:/code
+    command: >
+      bash -c "python plot_results_add_agg.py &&
+               python plot_results_cardinality.py"

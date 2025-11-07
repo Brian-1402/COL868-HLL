@@ -1,12 +1,12 @@
 -- ============================================================
--- FAST HLL Benchmark (30 mins runtime)
--- FULLY CORRECTED VERSION - Final
+-- HLL Cardinality (Read) Benchmark (FAST)
 -- ============================================================
 
 -- Clean start
 DROP TABLE IF EXISTS benchmark_data CASCADE;
+DROP TABLE IF EXISTS pre_aggregated_hlls CASCADE;
 DROP TABLE IF EXISTS results_exact CASCADE;
-DROP TABLE IF EXISTS results_hll CASCADE;
+DROP TABLE IF EXISTS results_hll_cardinality CASCADE;
 
 \timing on
 
@@ -34,7 +34,47 @@ ANALYZE benchmark_data;
 \echo '>>> Data generated successfully'
 
 -- ============================================================
--- 2. EXACT COUNT BASELINE
+-- 2. CREATE PRE-AGGREGATED HLLS
+-- ============================================================
+
+CREATE TABLE pre_aggregated_hlls (
+    precision INTEGER PRIMARY KEY,
+    hll_sketch hll,
+    exact_count BIGINT,
+    storage_bytes INTEGER
+);
+
+\echo '>>> Pre-aggregating HLLs (p=10, 12, 14)...'
+DO $$
+DECLARE
+    prec INTEGER;
+    hll_result hll;
+    exact_cnt BIGINT;
+BEGIN
+    -- Get exact count once
+    SELECT COUNT(DISTINCT user_id) INTO exact_cnt FROM benchmark_data;
+    
+    FOREACH prec IN ARRAY ARRAY[10, 12, 14] LOOP
+        -- Create the HLL sketch
+        SELECT hll_add_agg(hll_hash_integer(user_id), prec) 
+        INTO hll_result
+        FROM benchmark_data;
+        
+        -- Store the pre-aggregated HLL
+        INSERT INTO pre_aggregated_hlls VALUES (
+            prec,
+            hll_result,
+            exact_cnt,
+            pg_column_size(hll_result)
+        );
+    END LOOP;
+END $$;
+
+\echo '>>> HLLs pre-aggregated successfully.'
+
+
+-- ============================================================
+-- 3. EXACT COUNT BASELINE (Same as original benchmark)
 -- ============================================================
 
 CREATE TABLE results_exact (
@@ -79,10 +119,10 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 3. HLL APPROXIMATE COUNT
+-- 4. HLL CARDINALITY (READ) BENCHMARK
 -- ============================================================
 
-CREATE TABLE results_hll (
+CREATE TABLE results_hll_cardinality (
     test_name TEXT,
     precision INTEGER,
     row_count BIGINT,
@@ -94,47 +134,45 @@ CREATE TABLE results_hll (
     run_number INTEGER
 );
 
-\echo '>>> Running HLL tests (precisions 10, 12, 14)...'
+\echo '>>> Running HLL cardinality tests (precisions 10, 12, 14)...'
 
 DO $$
 DECLARE
     start_time TIMESTAMP;
     end_time TIMESTAMP;
     duration_ms NUMERIC;
-    hll_result hll;
     hll_estimate NUMERIC;
     exact_cnt BIGINT;
     prec INTEGER;
     i INTEGER;
     storage_size INTEGER;
     msg TEXT;
+    hll_to_test hll; -- Variable to hold the HLL sketch
 BEGIN
-    SELECT COUNT(DISTINCT user_id) INTO exact_cnt FROM benchmark_data;
-    
     FOREACH prec IN ARRAY ARRAY[10, 12, 14] LOOP
-        msg := '>>> Testing precision ' || prec;
+        msg := '>>> Testing cardinality precision ' || prec;
         RAISE NOTICE '%', msg;
+
+        -- Fetch the pre-aggregated HLL, exact count, and size
+        -- This ensures we do not time the table scan
+        SELECT hll_sketch, exact_count, storage_bytes 
+        INTO hll_to_test, exact_cnt, storage_size
+        FROM pre_aggregated_hlls WHERE precision = prec;
         
         -- Warmup
-        SELECT hll_add_agg(hll_hash_integer(user_id), prec) 
-        FROM benchmark_data INTO hll_result;
+        PERFORM hll_cardinality(hll_to_test);
         
         FOR i IN 1..5 LOOP
             start_time := clock_timestamp();
             
-            SELECT hll_add_agg(hll_hash_integer(user_id), prec) 
-            INTO hll_result
-            FROM benchmark_data;
+            -- THIS IS THE OPERATION BEING TIMED
+            SELECT hll_cardinality(hll_to_test) INTO hll_estimate;
             
             end_time := clock_timestamp();
             duration_ms := EXTRACT(EPOCH FROM (end_time - start_time)) * 1000;
             
-            hll_estimate := hll_cardinality(hll_result);
-            -- FIXED: Use pg_column_size instead of bytea cast
-            storage_size := pg_column_size(hll_result);
-            
-            INSERT INTO results_hll VALUES (
-                'hll_p' || prec,
+            INSERT INTO results_hll_cardinality VALUES (
+                'hll_cardinality_p' || prec,
                 prec,
                 (SELECT COUNT(*) FROM benchmark_data),
                 hll_estimate,
@@ -154,12 +192,12 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 4. RESULTS SUMMARY
+-- 5. RESULTS SUMMARY
 -- ============================================================
 
 \echo ''
 \echo '========================================'
-\echo 'RESULTS SUMMARY'
+\echo 'RESULTS SUMMARY (HLL CARDINALITY)'
 \echo '========================================'
 
 \echo ''
@@ -171,7 +209,7 @@ SELECT
 FROM results_exact;
 
 \echo ''
-\echo '>>> HLL RESULTS BY PRECISION'
+\echo '>>> HLL CARDINALITY RESULTS BY PRECISION'
 SELECT 
     precision as p,
     ROUND(AVG(hll_estimate)) as avg_estimate,
@@ -179,40 +217,40 @@ SELECT
     ROUND(AVG(duration_ms), 2) as avg_ms,
     ROUND(STDDEV(duration_ms), 2) as stddev_ms,
     ROUND(AVG(storage_bytes)) as storage_bytes
-FROM results_hll
+FROM results_hll_cardinality
 GROUP BY precision
 ORDER BY precision;
 
 \echo ''
-\echo '>>> SPEEDUP FACTORS'
+\echo '>>> SPEEDUP FACTORS (vs Exact COUNT)'
 SELECT 
     precision as p,
     ROUND(
         (SELECT AVG(duration_ms) FROM results_exact) / AVG(duration_ms),
         2
     ) as speedup
-FROM results_hll
+FROM results_hll_cardinality
 GROUP BY precision
 ORDER BY precision;
 
 -- ============================================================
--- 5. EXPORT RESULTS
+-- 6. EXPORT RESULTS
 -- ============================================================
 
 \echo ''
 \echo '>>> Exporting to CSV...'
 -- Create directory if it doesn't exist (shell command)
 \! mkdir -p /code/results
-\copy results_exact TO '/code/results/hll_add_agg_exact.csv' CSV HEADER
-\copy results_hll TO '/code/results/hll_add_agg_hll.csv' CSV HEADER
+\copy results_exact TO '/code/results/hll_cardinality_exact.csv' CSV HEADER
+\copy results_hll_cardinality TO '/code/results/hll_cardinality_hll.csv' CSV HEADER
 
 \echo ''
 \echo '========================================'
 \echo 'BENCHMARK COMPLETE!'
 \echo '========================================'
 \echo 'Results saved to /code/results/'
-\echo '  /code/results/hll_add_agg_exact.csv'
-\echo '  /code/results/hll_add_agg_hll.csv'
+\echo '  /code/results/hll_cardinality_exact.csv'
+\echo '  /code/results/hll_cardinality_hll.csv'
 \echo ''
-\echo 'Then run: python plot_results.py'
+\echo 'Next, run: python plot_results_cardinality.py'
 \echo '========================================'

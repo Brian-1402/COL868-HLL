@@ -1,6 +1,0 @@
-test_name,row_count,distinct_count,duration_ms,run_number
-exact_count,100000,10000,50.227000,1
-exact_count,100000,10000,51.394000,2
-exact_count,100000,10000,47.524000,3
-exact_count,100000,10000,45.993000,4
-exact_count,100000,10000,50.033000,5
