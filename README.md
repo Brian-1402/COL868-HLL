@@ -1,3 +1,13 @@
+## Todo
+- Add a `SELECT setseed(0.12345);` at the start of every `.sql` file for reproducibility.
+- Look into `SET work_mem = '256MB';`
+
+## Errors
+```
+psql:setup.sql:26: ERROR:  type modifiers must be simple constants or identifiers
+LINE 3:   users   hll(log2m=14, regwidth=5, expthresh=10, sparseon=1...
+```
+
 ## Setup Commands
 - **Run Compose:**
 ```bash
