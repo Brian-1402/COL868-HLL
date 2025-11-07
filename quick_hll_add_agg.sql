@@ -1,6 +1,5 @@
 -- ============================================================
--- FAST HLL Benchmark (30 mins runtime)
--- FULLY CORRECTED VERSION - Final
+-- FAST HLL Quick test - hll_add_agg
 -- ============================================================
 
 -- Clean start

@@ -1,4 +1,5 @@
 /results
+/tables
 /plots
 *.csv
 *.png

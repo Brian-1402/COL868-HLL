@@ -1,6 +1,18 @@
+# HyperLogLog (HLL) Benchmarking in PostgreSQL
+
+This experiment aims to evaluate HyperLogLog (HLL) probabilistic data structure for approximate distinct counting in PostgreSQL. We benchmark HLL against exact COUNT(DISTINCT) operations across multiple scales (10K to 10M rows) and precision parameters (10, 12, 14), analyzing accuracy, performance, and memory usage.
+
 ## Setup Commands
-- **Run Compose:**
+
+Prerequisites - Docker Desktop (with Docker Compose)
+
+- **Clone and Run Compose:**
 ```bash
+# 1. Clone repository
+git clone https://github.com/Brian-1402/COL868-HLL.git
+cd COL868-HLL
+
+# 2. Start PostgreSQL with HLL extension
 docker-compose up -d
 ```
 - **Enter Bash:**
@@ -12,35 +24,63 @@ docker exec -it pgdb bash
 docker exec -it pgdb psql
 ```
 
-## Running benchmarks
-- Todo
+## Running Experiments
 
-## Making plots
+### Experiment 1: hll_add_agg() - Aggregate Cardinality Estimation
+
+Purpose: Compare HLL approximate counting vs exact COUNT(DISTINCT)
+
+Parameters Varied:
+
+Dataset size: 10K, 100K, 1M, 10M rows
+HLL precision: 10, 12, 14
+Cardinality: 10% of dataset size
+
+Quick Benchmark (Recommended for Testing)
+Runtime: ~5 minutes
+Dataset: 100K rows, ~10K distinct values
+
 ```bash
-docker compose -f docker-compose.graphs.yml run --rm plotter
+# Run benchmark
+docker exec -it pgdb psql -f quick_hll_add_agg.sql
+
+# Make graphs
+docker compose -f docker-compose.graphs.yml run --rm plotter python quick_plot.py
 ```
 
+Multi-Scale Benchmark
+Runtime: 10-30 mins
+Datasets: 10K, 100K, 1M, 10M rows with 10% distinct values
+
+```bash
+# Run multi-scale benchmark (this takes time!)
+docker exec -it pgdb psql -f benchmark_hll_add_agg.sql
+
+# Make graphs
+docker compose -f docker-compose.graphs.yml run --rm plotter python plot_results_add_arg.py
+```
+
+## Data Characteristics
+
+- **Distribution:** Uniform random (not representative of real-world skew)
+- **Data Type:** Integer only (text hashing not tested)
+- **Cardinality:** Fixed at 10%
+
+
+## Cleanup Commands
+- **Stop and Remove Container:**
+```bash
+docker-compose down
+```
+
+Full system details available in MANIFEST.md
 
 ## Verification Commands
-#### 1\. Verify Files (Run in Bash)
+- Verify HLL extension is installed
 ```bash
-# 1. Check shared library
-ls -l /usr/lib/postgresql/17/lib/hll.so
-
-# 2. Check extension control/SQL files
-ls -l /usr/share/postgresql/17/extension/hll*
-
-# 3. Check JIT bitcode files
-ls -l /usr/lib/postgresql/17/lib/bitcode/hll*
+docker exec -it pgdb psql -U myuser -d mydb -c "\dx hll"
 ```
-#### 2\. Verify Extension (Run in psql)
-```sql
--- Check if available (should be listed) and installed (init script)
-\dx hll
 
--- Alternative SQL to check for installation in 'mydb'
-SELECT * FROM pg_extension WHERE extname = 'hll';
-```
 ### Basic HLL Test Commands (Run in psql)
 ```sql
 -- 1. Create a table
@@ -62,22 +102,4 @@ UPDATE test_hll SET items = hll_add(items, hll_hash_text('hello')) WHERE id = 1;
 -- 6. Check cardinality again using the operator (Expected: 2)
 SELECT #items FROM test_hll WHERE id = 1;
 ```
-## Cleanup Commands
-- **Stop and Remove Container:**
-```bash
-docker-compose down
-```
-- **Stop/Remove Container AND Delete Volume:**
-(This is the "full reset." It deletes the `pgdata` volume, forcing your init script to run again on next start)
-```bash
-docker-compose down -v
-```
 
-## Ideas
-- Will password encryption for database access slow down the benchmarking? can I disable password login for psql
-- Seems like building the extension runs cpp files whose outputs are saved in .sql files. It is based on system-dependent properties? there
-  are points of errors here if the build process somehow makes the extension with some bottlenecks
-- It's confirmed that this extension uses LLVM bitcode JIT compilation. Meaning, warmups are required for proper benchmarking so that
-  initial compilation delay is reduced.
-  - jit Parameter: Performance will be drastically different depending on the postgresql.conf setting jit = on (default) vs. jit = off. When
-    off, the bitcode is ignored, and only the standard hll.so is called. Must test and report both.
