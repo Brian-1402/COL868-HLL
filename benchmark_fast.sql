@@ -1,6 +1,6 @@
 -- ============================================================
 -- FAST HLL Benchmark (30 mins runtime)
--- Reduced dataset for quick results
+-- FULLY CORRECTED VERSION - Final
 -- ============================================================
 
 -- Clean start
@@ -57,6 +57,7 @@ DECLARE
     duration_ms NUMERIC;
     distinct_cnt BIGINT;
     i INTEGER;
+    msg TEXT;
 BEGIN
     FOR i IN 1..5 LOOP
         start_time := clock_timestamp();
@@ -72,7 +73,8 @@ BEGIN
             i
         );
         
-        RAISE NOTICE 'Run %: Exact = %, Time = % ms', i, distinct_cnt, ROUND(duration_ms, 2);
+        msg := 'Run ' || i || ': Exact = ' || distinct_cnt || ', Time = ' || ROUND(duration_ms, 2) || ' ms';
+        RAISE NOTICE '%', msg;
     END LOOP;
 END $$;
 
@@ -105,11 +107,13 @@ DECLARE
     prec INTEGER;
     i INTEGER;
     storage_size INTEGER;
+    msg TEXT;
 BEGIN
     SELECT COUNT(DISTINCT user_id) INTO exact_cnt FROM benchmark_data;
     
     FOREACH prec IN ARRAY ARRAY[10, 12, 14] LOOP
-        RAISE NOTICE '>>> Testing precision %', prec;
+        msg := '>>> Testing precision ' || prec;
+        RAISE NOTICE '%', msg;
         
         -- Warmup
         SELECT hll_add_agg(hll_hash_integer(user_id), prec) 
@@ -126,7 +130,8 @@ BEGIN
             duration_ms := EXTRACT(EPOCH FROM (end_time - start_time)) * 1000;
             
             hll_estimate := hll_cardinality(hll_result);
-            storage_size := octet_length(hll_result::bytea);
+            -- FIXED: Use pg_column_size instead of bytea cast
+            storage_size := pg_column_size(hll_result);
             
             INSERT INTO results_hll VALUES (
                 'hll_p' || prec,
@@ -140,8 +145,10 @@ BEGIN
                 i
             );
             
-            RAISE NOTICE 'Run %: Est = %, Error = %%, Time = % ms', 
-                i, ROUND(hll_estimate), ROUND(ABS(hll_estimate - exact_cnt) / exact_cnt * 100, 3), ROUND(duration_ms, 2);
+            msg := 'Run ' || i || ': Est = ' || ROUND(hll_estimate) || 
+                   ', Error = ' || ROUND(ABS(hll_estimate - exact_cnt) / exact_cnt * 100, 3) || 
+                   '%, Time = ' || ROUND(duration_ms, 2) || ' ms';
+            RAISE NOTICE '%', msg;
         END LOOP;
     END LOOP;
 END $$;
