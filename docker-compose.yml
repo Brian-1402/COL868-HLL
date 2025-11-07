@@ -9,6 +9,9 @@ services:
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: mydb
+      PGUSER: myuser
+      PGPASSWORD: mypassword
+      PGDATABASE: mydb
     
     # --- Performance & Benchmarking Additions ---
     
@@ -28,8 +31,11 @@ services:
       - "5432:5432"
     
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - .:/code
+      # - pgdata:/var/lib/postgresql/data
+    working_dir: /code
+
     restart: unless-stopped
 
-volumes:
-  pgdata:
+# volumes:
+#   pgdata:
