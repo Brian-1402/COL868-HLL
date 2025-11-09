@@ -89,6 +89,8 @@ BEGIN
     -- Generate data
     msg := '>>> Generating ' || data_size || ' rows...';
     RAISE NOTICE '%', msg;
+
+    EXECUTE 'SELECT setseed(0.5)';
     
     EXECUTE format('
         INSERT INTO benchmark_data (user_id, session_id)
