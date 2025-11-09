@@ -1,5 +1,5 @@
 -- ============================================================
--- FAST HLL Quick test - hll_add_agg
+-- Quick test - hll_add_agg
 -- ============================================================
 
 -- Clean start
@@ -10,7 +10,7 @@ DROP TABLE IF EXISTS results_hll CASCADE;
 \timing on
 
 -- ============================================================
--- 1. GENERATE DATA (100K rows, ~10K distinct)
+-- GENERATE DATA (100K rows, ~10K distinct)
 -- ============================================================
 
 CREATE TABLE benchmark_data (
@@ -33,7 +33,7 @@ ANALYZE benchmark_data;
 \echo '>>> Data generated successfully'
 
 -- ============================================================
--- 2. EXACT COUNT BASELINE
+-- EXACT COUNT BASELINE
 -- ============================================================
 
 CREATE TABLE results_exact (
@@ -78,7 +78,7 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 3. HLL APPROXIMATE COUNT
+-- HLL APPROXIMATE COUNT
 -- ============================================================
 
 CREATE TABLE results_hll (
@@ -125,11 +125,10 @@ BEGIN
             INTO hll_result
             FROM benchmark_data;
             
-            end_time := clock_timestamp();
-            duration_ms := EXTRACT(EPOCH FROM (end_time - start_time)) * 1000;
             
             hll_estimate := hll_cardinality(hll_result);
-            -- FIXED: Use pg_column_size instead of bytea cast
+            end_time := clock_timestamp();
+            duration_ms := EXTRACT(EPOCH FROM (end_time - start_time)) * 1000;
             storage_size := pg_column_size(hll_result);
             
             INSERT INTO results_hll VALUES (
@@ -153,12 +152,12 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 4. RESULTS SUMMARY
+-- RESULTS
 -- ============================================================
 
 \echo ''
 \echo '========================================'
-\echo 'RESULTS SUMMARY'
+\echo 'RESULTS'
 \echo '========================================'
 
 \echo ''
@@ -195,23 +194,23 @@ GROUP BY precision
 ORDER BY precision;
 
 -- ============================================================
--- 5. EXPORT RESULTS
+-- EXPORT TABLES
 -- ============================================================
 
 \echo ''
 \echo '>>> Exporting to CSV...'
--- Create directory if it doesn't exist (shell command)
-\! mkdir -p /code/results
-\copy results_exact TO '/code/results/hll_add_agg_exact.csv' CSV HEADER
-\copy results_hll TO '/code/results/hll_add_agg_hll.csv' CSV HEADER
+-- Create directory if it doesn't exist
+\! mkdir -p "/code/tables/quick_hll_add_agg"
+\copy results_exact TO '/code/tables/quick_hll_add_agg/exact.csv' CSV HEADER
+\copy results_hll TO '/code/tables/quick_hll_add_agg/hll.csv' CSV HEADER
 
 \echo ''
 \echo '========================================'
 \echo 'BENCHMARK COMPLETE!'
 \echo '========================================'
-\echo 'Results saved to /code/results/'
-\echo '  /code/results/hll_add_agg_exact.csv'
-\echo '  /code/results/hll_add_agg_hll.csv'
+\echo 'Results saved to /code/tables/'
+\echo '  /code/tables/quick_hll_add_agg/exact.csv'
+\echo '  /code/tables/quick_hll_add_agg/hll.csv'
 \echo ''
-\echo 'Then run: python plot_results.py'
+\echo 'Then run: docker compose -f docker-compose.graphs.yml run --rm plotter python quick_plot.py'
 \echo '========================================'

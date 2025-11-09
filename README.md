@@ -1,6 +1,6 @@
 # HyperLogLog (HLL) Benchmarking in PostgreSQL
 
-This experiment aims to evaluate HyperLogLog (HLL) probabilistic data structure for approximate distinct counting in PostgreSQL. We benchmark HLL against exact COUNT(DISTINCT) operations across multiple scales (10K to 10M rows) and precision parameters (10, 12, 14), analyzing accuracy, performance, and memory usage.
+This experiment aims to evaluate **HyperLogLog (HLL)** probabilistic data structure for approximate distinct counting in PostgreSQL. We benchmark **HLL against exact COUNT(DISTINCT)** operations across multiple scales (10K to 10M rows) and precision parameters (10, 12, 14), analyzing accuracy, performance, and memory usage.
 
 ## Setup Commands
 
@@ -15,30 +15,19 @@ cd COL868-HLL
 # 2. Start PostgreSQL with HLL extension
 docker-compose up -d
 ```
-- **Enter Bash:**
-```bash
-docker exec -it pgdb bash
-```
-- **Enter psql:**
-```bash
-docker exec -it pgdb psql
-```
 
 ## Running Experiments
 
 ### Experiment 1: hll_add_agg() - Aggregate Cardinality Estimation
 
-Purpose: Compare HLL approximate counting vs exact COUNT(DISTINCT)
+Purpose: Compare **HLL approximate counting** and **exact COUNT(DISTINCT)**
 
-Parameters Varied:
-
-Dataset size: 10K, 100K, 1M, 10M rows
 HLL precision: 10, 12, 14
-Cardinality: 10% of dataset size
 
-Quick Benchmark (Recommended for Testing)
-Runtime: ~5 minutes
-Dataset: 100K rows, ~10K distinct values
+##### Quick Test
+
+Dataset: 100K rows
+Cardinality: ~10K distinct values
 
 ```bash
 # Run benchmark
@@ -48,19 +37,22 @@ docker exec -it pgdb psql -f quick_hll_add_agg.sql
 docker compose -f docker-compose.graphs.yml run --rm plotter python quick_plot.py
 ```
 
-Multi-Scale Benchmark
+#### Multi-Scale Benchmark
+
 Runtime: 10-30 mins
-Datasets: 10K, 100K, 1M, 10M rows with 10% distinct values
+Datasets: 10K, 100K, 1M, 10M rows
+Cardinality: 10% of dataset size
+
 
 ```bash
-# Run multi-scale benchmark (this takes time!)
+# Run multi-scale benchmark
 docker exec -it pgdb psql -f benchmark_hll_add_agg.sql
 
 # Make graphs
 docker compose -f docker-compose.graphs.yml run --rm plotter python plot_results_add_arg.py
 ```
 
-## Data Characteristics
+#### Data Characteristics
 
 - **Distribution:** Uniform random (not representative of real-world skew)
 - **Data Type:** Integer only (text hashing not tested)
@@ -73,7 +65,7 @@ docker compose -f docker-compose.graphs.yml run --rm plotter python plot_results
 docker-compose down
 ```
 
-Full system details available in MANIFEST.md
+Full system details available in **MANIFEST.md**
 
 ## Verification Commands
 - Verify HLL extension is installed
