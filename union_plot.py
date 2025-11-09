@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-HLL Union Benchmark Visualization
-Generates comprehensive plots comparing hll_union_agg performance vs exact re-aggregation
+HLL Union Benchmark Visualization and Analysis
+Performs Phase 4 analysis (aggregation/calculation) and Phase 5 plotting.
 """
 
 import pandas as pd
@@ -16,19 +16,58 @@ plt.rcParams['figure.figsize'] = (14, 10)
 plt.rcParams['font.size'] = 10
 
 # Create output directory
-output_dir = Path('/code/graphs/hll_union_benchmark')
+output_dir = Path('./plots/hll_union')
 output_dir.mkdir(parents=True, exist_ok=True)
+tables_dir = Path('./tables/hll_union')
 
-# Load data
-print("Loading benchmark results...")
-comparison_df = pd.read_csv('/code/tables/hll_union_benchmark/comparison.csv')
-union_df = pd.read_csv('/code/tables/hll_union_benchmark/union_detailed.csv')
-exact_df = pd.read_csv('/code/tables/hll_union_benchmark/exact_detailed.csv')
+# Load raw detailed data
+print("Loading raw benchmark results for analysis...")
+try:
+    # These two files are the *only* inputs from the SQL script now.
+    union_df = pd.read_csv(tables_dir / 'union_detailed.csv')
+    exact_df = pd.read_csv(tables_dir / 'exact_detailed.csv')
+except FileNotFoundError as e:
+    print(f"Error: One or more raw data files not found. Ensure the SQL script ran successfully.")
+    print(f"Missing file: {e.filename}")
+    exit(1)
 
-print(f"Loaded {len(comparison_df)} comparison records")
 print(f"Loaded {len(union_df)} union test records")
 print(f"Loaded {len(exact_df)} exact test records")
 
+
+print("\nPerforming Data Aggregation and Calculation...")
+
+# 1. Aggregate union stats (mean time, mean estimate, total size)
+union_stats = union_df.groupby(['precision', 'num_days'], as_index=False).agg(
+    avg_estimate=('estimated_count', 'mean'),
+    union_time_ms=('query_time_ms', 'mean'),
+    union_stddev_ms=('query_time_ms', 'std'),
+    total_sketch_bytes=('total_sketch_size_bytes', 'max') # Max size is consistent for a given run
+)
+
+# 2. Aggregate exact stats (mean time, true count)
+exact_stats = exact_df.groupby('num_days', as_index=False).agg(
+    exact_count=('exact_count', 'mean'),
+    exact_time_ms=('query_time_ms', 'mean'),
+    exact_stddev_ms=('query_time_ms', 'std')
+)
+
+# 3. Join and calculate derived metrics
+comparison_df = union_stats.merge(exact_stats, on='num_days')
+
+comparison_df['error_absolute'] = abs(comparison_df['avg_estimate'] - comparison_df['exact_count'])
+comparison_df['error_pct'] = (comparison_df['error_absolute'] / comparison_df['exact_count']) * 100
+comparison_df['speedup_factor'] = comparison_df['exact_time_ms'] / comparison_df['union_time_ms']
+comparison_df['sketch_size_kb'] = comparison_df['total_sketch_bytes'] / 1024
+
+# Calculate efficiency score (for Plot 4)
+comparison_df['efficiency_score'] = comparison_df['speedup_factor'] / comparison_df['error_pct']
+
+# Save the generated comparison data back to a CSV (replacing the old SQL export)
+comparison_df.to_csv(tables_dir / 'comparison.csv', index=False)
+print(f"Saved aggregated results to: {tables_dir / 'comparison.csv'}")
+
+# Use this comparison_df for all subsequent plotting and statistics
 # ============================================================================
 # PLOT 1: Speedup Comparison by Time Window
 # ============================================================================
@@ -79,8 +118,8 @@ ax2.grid(True, alpha=0.3)
 # Add value labels
 for precision in [10, 12, 14]:
     data = comparison_df[comparison_df['precision'] == precision].sort_values('num_days')
-    for x, y in zip(data['num_days'], data['speedup_factor']):
-        ax2.text(x, y + 0.5, f'{y:.1f}x', ha='center', fontsize=8)
+    for x_val, y_val in zip(data['num_days'], data['speedup_factor']):
+        ax2.text(x_val, y_val + 0.5, f'{y_val:.1f}x', ha='center', fontsize=8)
 
 # Plot 1c: Accuracy (Error %)
 ax3 = axes[1, 0]
@@ -214,7 +253,7 @@ ax2.set_title('Error vs Storage Trade-off')
 ax2.legend()
 ax2.grid(True, alpha=0.3)
 
-# Plot 3b: Speedup by Precision
+# Plot 3c: Speedup by Precision
 ax3 = axes[2]
 speedup_by_prec = comparison_df.groupby('precision')['speedup_factor'].agg(['mean', 'std'])
 x_pos = np.arange(len(precisions))
@@ -282,6 +321,7 @@ ax2.grid(True, alpha=0.3)
 ax3 = axes[1, 0]
 for precision in precisions:
     data = comparison_df[comparison_df['precision'] == precision].sort_values('num_days')
+    # Time per sketch is calculated here in Python
     time_per_sketch = data['union_time_ms'] / data['num_days']
     ax3.plot(data['num_days'], time_per_sketch, marker='o', linewidth=2,
              markersize=8, label=f'Precision {precision}')
@@ -294,8 +334,7 @@ ax3.grid(True, alpha=0.3)
 
 # Plot 4d: Efficiency score (speedup / error)
 ax4 = axes[1, 1]
-comparison_df['efficiency_score'] = comparison_df['speedup_factor'] / comparison_df['error_pct']
-
+# Efficiency score is calculated in Phase 4 Pandas step
 for precision in precisions:
     data = comparison_df[comparison_df['precision'] == precision].sort_values('num_days')
     ax4.plot(data['num_days'], data['efficiency_score'], marker='o', linewidth=2,
