@@ -54,7 +54,7 @@ SELECT #items FROM test_hll WHERE id = 1;
 
 Test **HLL approximate counting** using **hll_add_agg** and **hll_cardinality** and  compare it against baseline **exact COUNT(DISTINCT)**
 
-**Configuration:**
+** Test Configuration:**
 - HLL precision: 10, 12, 14
 - Datasets: 10K, 100K, 1M, 10M rows
 - Cardinality: 10% of dataset size
